@@ -3,7 +3,7 @@ import gym
 import keras
 import tensorflow as tf
 from keras.models import Sequential
-from keras.layers import Dense, Dropout, Activation, Flatten, Conv2D, MaxPooling2D
+from keras.layers import Dense, Dropout, Activation, Flatten, Conv2D, MaxPooling2D, Input
 import numpy as np
 from math import *
 from collections import deque
@@ -11,7 +11,7 @@ from keras.optimizers import Adam
 from keras import backend as K
 
 
-ATARI_SHAPE = (6, 105, 80)
+ATARI_SHAPE = (105, 80, 4)
 MEMORY_SIZE = 1000000            # Number of transitions stored in the replay memory
 MAX_EPISODES = 200000
 EPISODES = 5000
@@ -76,7 +76,8 @@ class MyAgent:
         model.compile(loss=self._huber_loss, optimizer=Adam(lr=self.learning_rate))
 
         return model
-    
+
+
     def update_target_model(self):
         # copy weights from model to target_model
         self.target_model.set_weights(self.model.get_weights())
@@ -100,18 +101,17 @@ class MyAgent:
             return new_action
         else:
             model = self.CNN()
-            prediction = model.predict(state, self.actionslist)
+            prediction = model.predict(np.array(state), np.ones(self.action_size))
             return np.argmax(prediction[0])
 
     def replay(self, batch_size):
         minibatch = random.sample(self.memory, batch_size)
         for state, action, reward, next_state, done in minibatch:
-            target = self.model.predict(state, np.ones(self.action_size))
-
+            target = self.model.predict(np.array(state), np.ones(self.action_size))
             if self.is_done:
                 target[0][action] = reward
             else:
-                t = self.target_model.predict(next_state, self.action_size)[0]
+                t = self.target_model.predict(np.array(next_state), np.ones(self.action_size))[0]
                 target[0][action] = reward + self.gamma * np.amax(t)
             self.model.fit(state, target, epochs=1, verbose=0)
 
