@@ -50,7 +50,6 @@ class MyAgent:
 
         # functional API
         frames_input = keras.layers.Input(ATARI_SHAPE, name='frames')
-        #actions_input = keras.layers.Input(shape=(self.action_size, ), name='mask')
         actions_input = keras.layers.Input((self.action_size, ), name='mask')
 
         # normalize the frames
@@ -101,25 +100,18 @@ class MyAgent:
             return new_action
         else:
             model = self.CNN()
-            #prediction = model.predict({'frames': np.array(state), 'mask': np.array(self.action_size)})
             prediction = model.predict(state, self.actionslist)
-            #prediction = model.predict(state, (self.action_size, ))
             return np.argmax(prediction[0])
 
     def replay(self, batch_size):
         minibatch = random.sample(self.memory, batch_size)
         for state, action, reward, next_state, done in minibatch:
-            #diz = ({'frames': np.array(state), 'mask': np.array(self.action_size)})
-            #target = self.model.predict({'frames': np.array(state), 'mask': np.array(N_ACTIONS)})
-            #print(diz)
             target = self.model.predict(state, np.ones(self.action_size))
-            #target = self.model.predict(state, (self.action_size, ))
 
             if self.is_done:
                 target[0][action] = reward
             else:
-                #t = self.target_model.predict({'frames': np.array(next_state), 'mask': np.array(self.action_size)})[0]
-                t = self.target_model.predict(next_state, self.action_size)
+                t = self.target_model.predict(next_state, self.action_size)[0]
                 target[0][action] = reward + self.gamma * np.amax(t)
             self.model.fit(state, target, epochs=1, verbose=0)
 
