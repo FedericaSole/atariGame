@@ -50,8 +50,9 @@ class MyAgent:
 
         # functional API
         frames_input = keras.layers.Input(ATARI_SHAPE, name='frames')
+        #print(str(frames_input))
         actions_input = keras.layers.Input((self.action_size, ), name='mask')
-
+        #print(str(actions_input))
         # normalize the frames
         normalized = keras.layers.Lambda(lambda x: x / 255.0)(frames_input)
         # the cnn part follows this paper: Playing Atari with Deep Reinforcement Learning
@@ -101,17 +102,18 @@ class MyAgent:
             return new_action
         else:
             model = self.CNN()
-            prediction = model.predict(np.array(state), np.ones(self.action_size))
+            prediction = model.predict(state, np.ones(self.action_size))
             return np.argmax(prediction[0])
 
     def replay(self, batch_size):
         minibatch = random.sample(self.memory, batch_size)
         for state, action, reward, next_state, done in minibatch:
-            target = self.model.predict(np.array(state), np.ones(self.action_size))
+            #print(str(state)+str(np.ones(self.action_size)))
+            target = self.model.predict(state, np.ones(self.action_size))
             if self.is_done:
                 target[0][action] = reward
             else:
-                t = self.target_model.predict(np.array(next_state), np.ones(self.action_size))[0]
+                t = self.target_model.predict(next_state, np.ones(self.action_size))[0]
                 target[0][action] = reward + self.gamma * np.amax(t)
             self.model.fit(state, target, epochs=1, verbose=0)
 
@@ -120,6 +122,7 @@ class MyAgent:
 def preprocessing(img):
     new_img = img[::2, ::2]  # new img size = (105,80)
     new_img2 = np.mean(new_img, axis=2).astype(np.uint8)
+    #return new_img2.astype(np.float).ravel()
     return new_img2
 
 
