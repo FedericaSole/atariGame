@@ -102,28 +102,26 @@ class MyAgent:
             return new_action
         else:
             model = self.CNN()
-            prediction = model.predict(state, np.ones(self.action_size))
+            prediction = model.predict([state, np.ones(self.action_size)])
             return np.argmax(prediction[0])
 
     def replay(self, batch_size):
         minibatch = random.sample(self.memory, batch_size)
         for state, action, reward, next_state, done in minibatch:
             #print(str(state)+str(np.ones(self.action_size)))
-            target = self.model.predict(state, np.ones(self.action_size))
+            target = self.model.predict([state, np.ones(self.action_size)])
             if self.is_done:
                 target[0][action] = reward
             else:
-                t = self.target_model.predict(next_state, np.ones(self.action_size))[0]
+                t = self.target_model.predict([next_state, np.ones(self.action_size)])[0]
                 target[0][action] = reward + self.gamma * np.amax(t)
             self.model.fit(state, target, epochs=1, verbose=0)
 
 
 # resize the img frame (new_size = old_size/2) and make it black and white (scale of grey)
 def preprocessing(img):
-    new_img = img[::2, ::2]  # new img size = (105,80)
-    new_img2 = np.mean(new_img, axis=2).astype(np.uint8)
-    #return new_img2.astype(np.float).ravel()
-    return new_img2
+    new_img = img[::2, ::2, :]  # new img size = (105,80)
+    return new_img[:, :, 0]
 
 
 def main():
