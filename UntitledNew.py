@@ -96,23 +96,21 @@ class MyAgent:
         self.memory.append((state, action, reward, next_state, done))
 
     # after some random steps (epsilon=1 so the action is chosen randomly) it computes a new epsilon
-    def choose_epsilon(self, currentEpisodeNum, currentFrame):
+    def choose_epsilon(self, currentEpisodeNum):
         if currentEpisodeNum < RANDOM_STEPS:
             return self.epsilon
-        if currentFrame % 1000 == 0:
-            self.epsilon = self.epsilon * EPSILON_DECAY
-            print("cambiando eps: " + str(self.epsilon))
+        self.epsilon = self.epsilon * EPSILON_DECAY
+        print("cambiando eps: " + str(self.epsilon))
         return self.epsilon
 
     def choose_action(self, state, currentEpisodeNum, currentFrame):
-        self.epsilon = self.choose_epsilon(currentEpisodeNum, currentFrame)
+        #self.epsilon = self.choose_epsilon(currentEpisodeNum, currentFrame)
         rand_param = random.uniform(0, 1)
         if (rand_param < self.epsilon):
             new_action = np.random.randint(0, self.action_size)
             return new_action
         else:
             prediction = self.model.predict(state)
-            print("choosing wisely the action")
             return np.argmax(prediction[0])
 
     def replay(self, batch_size):
@@ -138,7 +136,8 @@ def main():
     while currentEpisodeNum < EPISODES:
         currentFrame = 1
         frame = env.reset()
-        while currentFrame < 200000:
+        player.epsilon = player.choose_epsilon(currentEpisodeNum)
+        while not is_done:
             action = player.choose_action(frame, currentEpisodeNum, currentFrame)
             nextFrame, reward, is_done, info = env.step(action)
             reward = reward if not is_done else -10
@@ -147,17 +146,15 @@ def main():
             player.remember(frame, action, reward, nextFrame, is_done)
             frame = nextFrame
 
-            if is_done:
-                print("totRew: " + str(totReward))
-                player.update_target_model()
-                totReward = 0
-                is_done = False
-                env.reset()
-                break
             currentFrame += 1
 
-        if (currentEpisodeNum % 100 == 0): print(
-            "rew: " + str(totReward) + "eps: " + str(player.epsilon) + "episode: " + str(currentEpisodeNum))
+        if is_done:
+            print("totRew: " + str(totReward))
+            player.update_target_model()
+            totReward = 0
+            is_done = False
+
+        if currentEpisodeNum % 100 == 0: print("eps: " + str(player.epsilon) + "episode: " + str(currentEpisodeNum))
         if len(player.memory) > batch_size:
             player.replay(batch_size)
 
