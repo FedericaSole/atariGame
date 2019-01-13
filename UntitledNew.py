@@ -3,40 +3,38 @@ import gym
 import keras
 import tensorflow as tf
 from keras.models import Sequential
-from keras.layers import Dense, Dropout, Activation, Flatten, Conv2D, MaxPooling2D, Input
+from keras.layers import Dense
 import numpy as np
 from math import *
 from collections import deque
 from keras.optimizers import Adam
 from keras import backend as K
 
-
-ATARI_SHAPE = (105, 80, 4)
-MEMORY_SIZE = 1000000            # Number of transitions stored in the replay memory
-MAX_EPISODES = 200000
-EPISODES = 5000
-MAX_FRAMES = 15000000
+EPISODES = 1500000
 MIN_EPSILON = 0.01
 MAX_EPSILON = 1
 EPSILON_DECAY = 0.995
 RANDOM_STEPS = 1000
-N_ACTIONS = 6       #this is the number of actions specifically for the breakout game
+RANDOM_STEPS = 200
 
 
 class MyAgent:
-    def __init__(self, env):
+    def __init__(self, env, is_done):
         self.action_size = env.action_space.n
-        self.memory = deque(maxlen=2000)
+        self.state_size = env.observation_space.shape[0]
+        self.memory = deque(maxlen=20000)
         self.gamma = 0.95  # discount rate
         self.epsilon_max = 1.0  # exploration rate
+        self.epsilon = MAX_EPSILON
         self.epsilon_min = 0.01
         self.epsilon_decay = 0.995
+        # self.epsilon = 0.5
         self.learning_rate = 0.001
-        self.model = self.CNN()
-        self.target_model = self.CNN()
+        self.model = self.build_model()
+        self.target_model = self.build_model()
         self.update_target_model()
-        self.is_done = False
-        
+        self.is_done = is_done
+
     def _huber_loss(self, y_true, y_pred, clip_delta=1.0):
         error = y_true - y_pred
         cond = K.abs(error) <= clip_delta
@@ -46,10 +44,11 @@ class MyAgent:
 
         return K.mean(tf.where(cond, squared_loss, quadratic_loss))
 
+    '''
     def CNN(self):
 
         # functional API
-        frames_input = keras.layers.Input(ATARI_SHAPE, name='frames')
+        frames_input = keras.layers.Input(self.sp, name='frames')
         #print(str(frames_input))
         actions_input = keras.layers.Input((self.action_size, ), name='mask')
         #print(str(actions_input))
@@ -77,7 +76,17 @@ class MyAgent:
         model.compile(loss=self._huber_loss, optimizer=Adam(lr=self.learning_rate))
 
         return model
+    '''
 
+    def build_model(self):
+        # Neural Net for Deep-Q learning Model
+        model = Sequential()
+        model.add(Dense(24, input_dim=1, activation='relu'))
+        model.add(Dense(24, activation='relu'))
+        model.add(Dense(self.action_size, activation='linear'))
+        model.compile(loss=self._huber_loss,
+                      optimizer=Adam(lr=self.learning_rate))
+        return model
 
     def update_target_model(self):
         # copy weights from model to target_model
@@ -86,82 +95,73 @@ class MyAgent:
     def remember(self, state, action, reward, next_state, done):
         self.memory.append((state, action, reward, next_state, done))
 
-    #after some random steps (epsilon=1 so the action is chosen randomly) it computes a new epsilon using a sinusoidal decaying function
-    def choose_epsilon(self, epsilon, currentEpisodeNum):
+    # after some random steps (epsilon=1 so the action is chosen randomly) it computes a new epsilon
+    def choose_epsilon(self, currentEpisodeNum, currentFrame):
         if currentEpisodeNum < RANDOM_STEPS:
-            return epsilon
-        new_epsilon = epsilon * pow(EPSILON_DECAY, currentEpisodeNum) * 1 / 2 * (
-                    1 + cos((2 * pi * currentEpisodeNum * 1) / MAX_EPISODES))   #1(one) instead of miniepochs num
-        return new_epsilon
+            return self.epsilon
+        if currentFrame % 1000 == 0:
+            self.epsilon = self.epsilon * EPSILON_DECAY
+            print("cambiando eps: " + str(self.epsilon))
+        return self.epsilon
 
-    def choose_action(self, state, epsilon, currentEpisodeNum):
-        epsilon = self.choose_epsilon(epsilon, currentEpisodeNum)
+    def choose_action(self, state, currentEpisodeNum, currentFrame):
+        self.epsilon = self.choose_epsilon(currentEpisodeNum, currentFrame)
         rand_param = random.uniform(0, 1)
-        if (rand_param < epsilon):
-            new_action = np.random.randint(0, N_ACTIONS)
+        if (rand_param < self.epsilon):
+            new_action = np.random.randint(0, self.action_size)
             return new_action
         else:
-            model = self.CNN()
-            prediction = model.predict([state, np.ones(self.action_size)])
+            prediction = self.model.predict(state)
+            print("choosing wisely the action")
             return np.argmax(prediction[0])
 
     def replay(self, batch_size):
         minibatch = random.sample(self.memory, batch_size)
         for state, action, reward, next_state, done in minibatch:
-            #print(str(state)+str(np.ones(self.action_size)))
-            target = self.model.predict([state, np.ones(self.action_size)])
+            target = self.model.predict(state)
             if self.is_done:
                 target[0][action] = reward
             else:
-                t = self.target_model.predict([next_state, np.ones(self.action_size)])[0]
+                t = self.target_model.predict(next_state)[0]
                 target[0][action] = reward + self.gamma * np.amax(t)
             self.model.fit(state, target, epochs=1, verbose=0)
 
 
-# resize the img frame (new_size = old_size/2) and make it black and white (scale of grey)
-def preprocessing(img):
-    new_img = img[::2, ::2, :]  # new img size = (105,80)
-    return new_img[:, :, 0]
-
-
 def main():
-    env = gym.make('PongDeterministic-v4')
-    player = MyAgent(env)
-    #print(player.model.summary())
-    old_frame = env.reset()
-    frame = preprocessing(old_frame)
+    env = gym.make('Pong-ram-v0')
+    is_done = False
+    player = MyAgent(env, is_done)
     batch_size = 32
-    epsilon = MAX_EPSILON
     currentEpisodeNum = 0
     totReward = 0
-    
-    #while currentEpisodeNum < MAX_EPISODES:
-    while currentEpisodeNum < 20000:
-        #for currentFrame in range(0, 200000):
-        for currentFrame in range(0, 10000):
-            action = player.choose_action(frame, epsilon, currentEpisodeNum)
 
+    while currentEpisodeNum < EPISODES:
+        currentFrame = 1
+        frame = env.reset()
+        while currentFrame < 200000:
+            action = player.choose_action(frame, currentEpisodeNum, currentFrame)
             nextFrame, reward, is_done, info = env.step(action)
             reward = reward if not is_done else -10
             totReward += reward
 
-            next_processed_state = preprocessing(nextFrame)
+            player.remember(frame, action, reward, nextFrame, is_done)
+            frame = nextFrame
 
-            player.remember(frame, action, reward, next_processed_state, is_done)
-            frame = preprocessing(nextFrame)
-
-            if player.is_done:
+            if is_done:
+                print("totRew: " + str(totReward))
                 player.update_target_model()
-                print(totReward)
                 totReward = 0
-                player.is_done = False
-                frame = env.reset()
+                is_done = False
+                env.reset()
                 break
+            currentFrame += 1
 
+        if (currentEpisodeNum % 100 == 0): print(
+            "rew: " + str(totReward) + "eps: " + str(player.epsilon) + "episode: " + str(currentEpisodeNum))
         if len(player.memory) > batch_size:
-                player.replay(batch_size)
-        
-        currentEpisodeNum+=1
+            player.replay(batch_size)
+
+        currentEpisodeNum += 1
+
 
 main()
-
